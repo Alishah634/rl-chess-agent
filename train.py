@@ -45,27 +45,25 @@ def demo_game_live(model, device, delay: float = 0.15, max_plies: int = 200) -> 
     print("DEMO RESULT:", board.outcome(claim_draw=True))
     print("=" * 60 + "\n")
 
-def play_one_game(model: ChessPolicy, device: torch.device, max_plies: int = 400) -> Tuple[List[StepLog], int]:
+def play_one_game(model, device):
     board = chess.Board()
-    traj: List[StepLog] = []
-
-    plies = 0
-    while not board.is_game_over(claim_draw=True) and plies < max_plies:
-        turn_was_white = (board.turn == chess.WHITE)
-        move, logp = select_move(model, board, device, greedy=False)
-        traj.append(StepLog(logp=logp, turn_was_white=turn_was_white))
-        board.push(move)
-        plies += 1
-
-    # If we hit max plies, treat as draw (helps avoid endless games early on)
-    if not board.is_game_over(claim_draw=True):
-        # z = 0
-        z = -0.5
-    else:
-        z = terminal_result_white(board)
-
-    return traj, z
-
+    traj = []
+    while not board.is_game_over() and len(traj) < 200:
+        # Get moves and the board's Value
+        s = torch.from_numpy(encode_board(board)).unsqueeze(0).to(device)
+        m_np = np.stack([move_features(board, mv) for mv in board.legal_moves])
+        m = torch.from_numpy(m_np).to(device)
+        
+        logits, value = model(s, m)
+        probs = F.softmax(logits, dim=0)
+        
+        # Sample move
+        dist = torch.distributions.Categorical(probs=probs)
+        idx = dist.sample()
+        
+        traj.append(StepLog(logp=dist.log_prob(idx), value=value, turn_was_white=(board.turn == chess.WHITE)))
+        board.push(list(board.legal_moves)[idx.item()])
+    return traj, terminal_result_white(board)
 
 def train(games: int = 500, lr: float = 1e-3, device_str: str = "cuda") -> ChessPolicy:
     # device = torch.device(device_str)
