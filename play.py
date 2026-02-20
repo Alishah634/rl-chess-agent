@@ -221,7 +221,7 @@ class PlayVsBotGUI(QWidget):
 
     def make_bot_move(self) -> None:
         try:
-            move, _ = select_move(self.model, self.board, self.device, greedy=True)
+            move, _, _, _ = select_move(self.model, self.board, self.device, greedy=True)
         except Exception as e:
             self.status.setText(f"Bot move failed: {e}")
             return
